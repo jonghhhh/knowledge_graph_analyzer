@@ -10,7 +10,7 @@ from utils import get_color_by_entity_type
 
 # 페이지 설정
 st.set_page_config(
-    page_title="한국어 지식 그래프 생성기",
+    page_title="한국어 지식 그래프(knowledge graph) 분석",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -66,6 +66,8 @@ if 'relations_with_info_df' not in st.session_state:
     st.session_state.relations_with_info_df = None
 if 'jsonl_content' not in st.session_state:
     st.session_state.jsonl_content = None
+if 'text_input' not in st.session_state:
+    st.session_state.text_input = ""
 
 # 샘플 텍스트
 sample_text = """
@@ -90,8 +92,7 @@ with st.sidebar:
     
     # API 키 입력
     api_key = st.text_input("Gemini API 키", type="password", help="Google AI Studio에서 발급받은 API 키를 입력하세요.")
-    
-    # API 키 저장
+    # API 키 저장 (이 키는 사용자가 직접 입력한 값이므로 외부에서 넣은 것으로 처리)
     if api_key:
         os.environ["GOOGLE_API_KEY"] = api_key
     
@@ -135,24 +136,23 @@ with tab1:
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        # 텍스트 입력 영역
+        # 샘플 텍스트 또는 이전 입력을 기본값으로 사용
         text_input = st.text_area(
             "분석할 텍스트를 입력하세요",
+            value=st.session_state.get("text_input", sample_text),
             height=300,
             placeholder="여기에 한국어 텍스트를 입력하세요..."
         )
     
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        # 샘플 텍스트 불러오기
+        # 샘플 텍스트 불러오기 버튼
         if st.button("샘플 텍스트 불러오기", use_container_width=True):
-            text_input = sample_text
             st.session_state.text_input = sample_text
             st.experimental_rerun()
         
-        # 입력 지우기
+        # 입력 지우기 버튼
         if st.button("입력 지우기", use_container_width=True):
-            text_input = ""
             st.session_state.text_input = ""
             st.experimental_rerun()
     
@@ -165,10 +165,7 @@ with tab1:
         else:
             with st.spinner("지식 그래프를 생성하는 중입니다..."):
                 try:
-                    # 임시 디렉토리 생성
                     temp_dir = tempfile.mkdtemp()
-                    
-                    # 지식 그래프 추출
                     extractor = KnowledgeGraphExtractor(
                         api_key=api_key,
                         model_name=model_name,
@@ -179,52 +176,44 @@ with tab1:
                     result = extractor.extract(text_input)
                     
                     if result["success"]:
-                        # 세션 상태에 결과 저장
                         st.session_state.graph_data = result["data"]
                         st.session_state.entities_df = result["dataframes"]["entities"]
                         st.session_state.relations_df = result["dataframes"]["relations"]
-                        
                         if "relations_with_info" in result["dataframes"]:
                             st.session_state.relations_with_info_df = result["dataframes"]["relations_with_info"]
-                        
-                        # JSONL 파일 읽기
                         with open(result["jsonl_path"], 'r', encoding='utf-8') as f:
                             st.session_state.jsonl_content = f.read()
                             
-                        # 성공 메시지
                         n_entities = len(result["data"]["entities"])
                         n_relations = len(result["data"]["relations"])
                         
                         st.success(f"지식 그래프 추출 성공! 개체 {n_entities}개, 관계 {n_relations}개를 찾았습니다.")
-                        
-                        # 그래프 시각화 탭으로 전환
                         st.balloons()
                     else:
                         st.error(f"추출 실패: {result['message']}")
                 except Exception as e:
                     st.error(f"오류 발생: {str(e)}")
     
-    # 그래프 표시
+    # 그래프 시각화
     if st.session_state.graph_data:
         st.subheader("지식 그래프 시각화")
         
-        # 노드 및 엣지 생성
         nodes = []
         edges = []
         
-        # 노드 생성
+        # 개체 노드 생성: 글자 크기를 크게 하고, 노드 안에 라벨이 위치하도록 설정
         for entity in st.session_state.graph_data["entities"]:
             nodes.append(
                 Node(
                     id=entity["id"],
                     label=entity["name"],
                     color=get_color_by_entity_type(entity["type"]),
-                    size=25,
+                    size=25,  # 노드 크기는 그대로 둠
                     title=f"유형: {entity['type']}<br>설명: {entity['description']}"
                 )
             )
         
-        # 엣지 생성
+        # 관계 엣지 생성: 글자 크기를 작게 설정
         for relation in st.session_state.graph_data["relations"]:
             edges.append(
                 Edge(
@@ -235,7 +224,7 @@ with tab1:
                 )
             )
         
-        # 그래프 설정
+        # 그래프 설정: 노드 글자 크게(예: size 20, align center), 관계 글자 작게(예: size 10)
         config = Config(
             width="100%",
             height=600,
@@ -244,12 +233,12 @@ with tab1:
             hierarchical=False,
             node={
                 "shape": "circle",
-                "font": {"size": 14, "face": "Nanum Gothic"},
-                "scaling": {"min": 20, "max": 40},
+                "font": {"size": 20, "face": "Nanum Gothic", "align": "center"},
+                "scaling": {"min": 30, "max": 50},
                 "shadow": True
             },
             edge={
-                "font": {"size": 12, "face": "Nanum Gothic"},
+                "font": {"size": 10, "face": "Nanum Gothic"},
                 "smooth": {"type": "dynamic"},
                 "arrows": {"to": {"enabled": True, "scaleFactor": 0.5}}
             },
@@ -261,21 +250,17 @@ with tab1:
             }
         )
         
-        # 그래프 렌더링
         agraph(nodes=nodes, edges=edges, config=config)
 
 with tab2:
     if st.session_state.graph_data:
         col1, col2 = st.columns(2)
-        
         with col1:
             st.subheader("개체 (Entities)")
             st.dataframe(st.session_state.entities_df, use_container_width=True)
-        
         with col2:
             st.subheader("관계 (Relations)")
             st.dataframe(st.session_state.relations_df, use_container_width=True)
-        
         if st.session_state.relations_with_info_df is not None:
             st.subheader("관계 정보 (Relations with Info)")
             st.dataframe(st.session_state.relations_with_info_df, use_container_width=True)
@@ -285,10 +270,7 @@ with tab2:
 with tab3:
     if st.session_state.graph_data:
         st.subheader("데이터 내보내기")
-        
-        # CSV 다운로드 버튼
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             if st.session_state.entities_df is not None:
                 entities_csv = st.session_state.entities_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
@@ -299,7 +281,6 @@ with tab3:
                     mime="text/csv",
                     use_container_width=True
                 )
-        
         with col2:
             if st.session_state.relations_df is not None:
                 relations_csv = st.session_state.relations_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
@@ -310,7 +291,6 @@ with tab3:
                     mime="text/csv",
                     use_container_width=True
                 )
-        
         with col3:
             if st.session_state.relations_with_info_df is not None:
                 relations_info_csv = st.session_state.relations_with_info_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
@@ -321,8 +301,6 @@ with tab3:
                     mime="text/csv",
                     use_container_width=True
                 )
-        
-        # JSONL 다운로드 버튼
         if st.session_state.jsonl_content:
             st.download_button(
                 label="JSONL 파일 다운로드",
@@ -331,8 +309,6 @@ with tab3:
                 mime="application/jsonl",
                 use_container_width=True
             )
-        
-        # JSON 다운로드 버튼
         json_data = json.dumps(st.session_state.graph_data, ensure_ascii=False, indent=2).encode('utf-8')
         st.download_button(
             label="JSON 파일 다운로드",
@@ -343,3 +319,4 @@ with tab3:
         )
     else:
         st.info("먼저 텍스트를 분석해주세요.")
+
