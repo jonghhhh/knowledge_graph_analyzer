@@ -83,8 +83,8 @@ sample_text = """
 """
 
 # 타이틀
-st.markdown('<h1 class="main-header">한국어 지식 그래프 생성기</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">텍스트를 입력하면 개체(Entity)와 관계(Relation)를 추출하여 그래프로 시각화합니다.</p>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">한국어 지식 그래프(knowledge graph) 분석</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">텍스트를 입력하면 개체(Entity)와 관계(Relation)를 추출해 그래프로 시각화합니다.</p>', unsafe_allow_html=True)
 
 # 사이드바
 with st.sidebar:
