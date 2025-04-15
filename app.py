@@ -85,6 +85,8 @@ sample_text = """
 # 타이틀
 st.markdown('<h1 class="main-header">한국어 지식 그래프(knowledge graph) 분석</h1>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">텍스트를 입력하면 개체(Entity)와 관계(Relation)를 추출해 그래프로 시각화합니다.</p>', unsafe_allow_html=True)
+# AI 처리로 인한 입력문 제한 안내
+st.info("입력문은 AI 처리 때문에 1000자 이내를 권장합니다.")
 
 # 사이드바
 with st.sidebar:
