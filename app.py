@@ -7,6 +7,7 @@ import base64
 from streamlit_agraph import agraph, Node, Edge, Config
 from kg_extractor import KnowledgeGraphExtractor
 from utils import get_color_by_entity_type
+from pyvis.network import Network  # HTML 네트워크 그래프를 위한 pyvis 라이브러리 추가
 
 # 페이지 설정
 st.set_page_config(
@@ -68,6 +69,72 @@ if 'jsonl_content' not in st.session_state:
     st.session_state.jsonl_content = None
 if 'text_input' not in st.session_state:
     st.session_state.text_input = ""
+if 'html_content' not in st.session_state:
+    st.session_state.html_content = None
+
+# HTML 그래프 생성 함수 (pyvis)
+def generate_html_graph(graph_data):
+    net = Network(height="600px", width="100%", directed=True, notebook=True)
+    
+    # 노드 추가 (크기 40, 개체 유형별 색상)
+    for entity in graph_data["entities"]:
+        net.add_node(
+            entity["id"], 
+            label=entity["name"],
+            title=f"유형: {entity['type']}<br>설명: {entity['description']}",
+            color=get_color_by_entity_type(entity["type"]),
+            size=40
+        )
+    
+    # 엣지 추가 (회색 계열, 두께 2)
+    for relation in graph_data["relations"]:
+        net.add_edge(
+            relation["source"],
+            relation["target"],
+            label=relation["relation"],
+            title=relation.get("sentence", ""),
+            color="#555",
+            width=2
+        )
+    
+    # 옵션 설정 (노드 최소/최대 크기 수정)
+    net.set_options("""
+    {
+      "nodes": {
+        "shape": "circle",
+        "font": {"size": 20, "face": "Nanum Gothic"},
+        "scaling": {"min": 40, "max": 60},
+        "shadow": true
+      },
+      "edges": {
+        "font": {"size": 10, "face": "Nanum Gothic"},
+        "smooth": {"type": "dynamic"},
+        "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}}
+      },
+      "physics": {
+        "hierarchicalRepulsion": {
+          "centralGravity": 0.5,
+          "nodeDistance": 120
+        },
+        "maxVelocity": 50,
+        "minVelocity": 0.1,
+        "solver": "hierarchicalRepulsion"
+      }
+    }
+    """)
+    
+    # 임시 HTML 파일 생성
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
+    net.save_graph(temp_file.name)
+    
+    # HTML 파일 읽기
+    with open(temp_file.name, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    # 임시 파일 삭제
+    os.unlink(temp_file.name)
+    
+    return html_content
 
 # 샘플 텍스트
 sample_text = """
@@ -153,9 +220,17 @@ with tab1:
             st.session_state.text_input = sample_text
             st.experimental_rerun()
         
-        # 입력 지우기 버튼
+        # 입력 지우기 버튼 - 분석 결과도 모두 초기화되도록 개선
         if st.button("입력 지우기", use_container_width=True):
+            # 텍스트 입력 초기화
             st.session_state.text_input = ""
+            # 분석 결과 초기화
+            st.session_state.graph_data = None
+            st.session_state.entities_df = None
+            st.session_state.relations_df = None
+            st.session_state.relations_with_info_df = None
+            st.session_state.jsonl_content = None
+            st.session_state.html_content = None
             st.experimental_rerun()
     
     # 분석 버튼
@@ -185,6 +260,9 @@ with tab1:
                             st.session_state.relations_with_info_df = result["dataframes"]["relations_with_info"]
                         with open(result["jsonl_path"], 'r', encoding='utf-8') as f:
                             st.session_state.jsonl_content = f.read()
+                        
+                        # HTML 그래프 생성
+                        st.session_state.html_content = generate_html_graph(result["data"])
                             
                         n_entities = len(result["data"]["entities"])
                         n_relations = len(result["data"]["relations"])
@@ -203,30 +281,31 @@ with tab1:
         nodes = []
         edges = []
         
-        # 개체 노드 생성: 글자 크기를 크게 하고, 노드 안에 라벨이 위치하도록 설정
+        # 개체 노드 생성 (size 40, 개체 유형별 색상 적용)
         for entity in st.session_state.graph_data["entities"]:
             nodes.append(
                 Node(
                     id=entity["id"],
                     label=entity["name"],
                     color=get_color_by_entity_type(entity["type"]),
-                    size=25,  # 노드 크기는 그대로 둠
+                    size=40,
                     title=f"유형: {entity['type']}<br>설명: {entity['description']}"
                 )
             )
         
-        # 관계 엣지 생성: 글자 크기를 작게 설정
+        # 관계 엣지 생성 (색상 "#888" 지정)
         for relation in st.session_state.graph_data["relations"]:
             edges.append(
                 Edge(
                     source=relation["source"],
                     target=relation["target"],
                     label=relation["relation"],
-                    title=relation.get("sentence", "")
+                    title=relation.get("sentence", ""),
+                    color="#888"
                 )
             )
         
-        # 그래프 설정: 노드 글자 크게(예: size 20, align center), 관계 글자 작게(예: size 10)
+        # 그래프 설정: 노드와 엣지의 크기 및 스타일 수정
         config = Config(
             width="100%",
             height=600,
@@ -236,13 +315,13 @@ with tab1:
             node={
                 "shape": "circle",
                 "font": {"size": 20, "face": "Nanum Gothic", "align": "center"},
-                "scaling": {"min": 30, "max": 50},
+                "scaling": {"min": 40, "max": 60},
                 "shadow": True
             },
             edge={
                 "font": {"size": 10, "face": "Nanum Gothic"},
                 "smooth": {"type": "dynamic"},
-                "arrows": {"to": {"enabled": True, "scaleFactor": 0.5}}
+                "arrows": {"to": {"enabled": True, "scaleFactor": 0.7}}
             },
             interaction={
                 "hover": True,
@@ -303,22 +382,26 @@ with tab3:
                     mime="text/csv",
                     use_container_width=True
                 )
-        if st.session_state.jsonl_content:
-            st.download_button(
-                label="JSONL 파일 다운로드",
-                data=st.session_state.jsonl_content.encode('utf-8'),
-                file_name="extracted_data.jsonl",
-                mime="application/jsonl",
-                use_container_width=True
-            )
-        json_data = json.dumps(st.session_state.graph_data, ensure_ascii=False, indent=2).encode('utf-8')
-        st.download_button(
-            label="JSON 파일 다운로드",
-            data=json_data,
-            file_name="knowledge_graph.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.session_state.jsonl_content:
+                st.download_button(
+                    label="JSONL 파일 다운로드",
+                    data=st.session_state.jsonl_content.encode('utf-8'),
+                    file_name="extracted_data.jsonl",
+                    mime="application/jsonl",
+                    use_container_width=True
+                )
+        with col2:
+            if st.session_state.html_content:
+                st.download_button(
+                    label="인터랙티브 그래프(HTML) 다운로드",
+                    data=st.session_state.html_content.encode('utf-8'),
+                    file_name="knowledge_graph.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
     else:
         st.info("먼저 텍스트를 분석해주세요.")
 
